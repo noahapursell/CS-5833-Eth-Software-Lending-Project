@@ -1,0 +1,81 @@
+{
+    "games": [
+        {
+            "name": "Minecraft",
+            "owner": "user1",
+            "original_price_eth": 1.0,
+            "lendable": true,
+            "lending_rate_percent": 2.0
+        },
+        {
+            "name": "Stardew Valley",
+            "owner": "user1",
+            "original_price_eth": 0.5,
+            "lendable": true,
+            "lending_rate_percent": 1.5
+        },
+        {
+            "name": "Among Us",
+            "owner": "user2",
+            "original_price_eth": 0.2,
+            "lendable": true,
+            "lending_rate_percent": 3.0
+        },
+        {
+            "name": "Overcooked!",
+            "owner": "user2",
+            "original_price_eth": 1.5,
+            "lendable": true,
+            "lending_rate_percent": 1.0
+        },
+        {
+            "name": "Minecraft",
+            "owner": "user3",
+            "original_price_eth": 1.0,
+            "lendable": true,
+            "lending_rate_percent": 4.0
+        }
+    ],
+    "lending_records": [
+        {
+            "game_name": "Stardew Valley",
+            "owner": "user1",
+            "borrower": "user3",
+            "start_time": "2023-10-25T10:00:00",
+            "end_time": null,
+            "lending_rate_percent": 5.0
+        },
+        {
+            "game_name": "Among Us",
+            "owner": "user2",
+            "borrower": "user1",
+            "start_time": "2023-10-20T14:00:00",
+            "end_time": "2023-10-22T14:00:00",
+            "lending_rate_percent": 3.0
+        },
+        {
+            "game_name": "Minecraft",
+            "owner": "user3",
+            "borrower": "user2",
+            "start_time": "2023-10-24T09:00:00",
+            "end_time": null,
+            "lending_rate_percent": 4.0
+        },
+        {
+            "game_name": "Among Us",
+            "owner": "user2",
+            "borrower": "user1",
+            "start_time": "2025-04-03T15:42:37.967600",
+            "end_time": "2025-04-03T15:42:50.864321",
+            "lending_rate_percent": 3.0
+        },
+        {
+            "game_name": "Among Us",
+            "owner": "user2",
+            "borrower": "user1",
+            "start_time": "2025-04-03T15:44:27.492630",
+            "end_time": null,
+            "lending_rate_percent": 3.0
+        }
+    ]
+}
