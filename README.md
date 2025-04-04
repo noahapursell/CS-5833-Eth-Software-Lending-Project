@@ -32,7 +32,7 @@ This will:
 - Mount your project directory into the container
 - Start a bash shell inside the container, ready to run Python commands
 
-### Smart-Contracts
+#### Smart-Contracts
 
 1. Install and start Docker:
    - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and Mac
