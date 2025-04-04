@@ -10,7 +10,7 @@ This project uses Docker to provide a consistent Python development environment.
    - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and Mac
    - `docker` package for Linux distributions
 
-2. To build and start the development container:
+2. To build and start the development container (from the top directory):
 
 - **On Linux or Mac (Unix systems)**:
 
