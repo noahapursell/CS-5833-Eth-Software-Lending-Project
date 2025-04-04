@@ -21,7 +21,7 @@ This project uses Docker to provide a consistent Python development environment.
 - **On Windows (Command Prompt)**:
 
   ```bat
-  scripts.windows\run.bat
+  scripts\windows\run.bat
   ```
 
 This will:
