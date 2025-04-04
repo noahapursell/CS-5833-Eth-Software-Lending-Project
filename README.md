@@ -6,6 +6,8 @@ This project uses Docker to provide a consistent Python development environment.
 
 ### Setup Instructions
 
+#### Client
+
 1. Install and start Docker:
    - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and Mac
    - `docker` package for Linux distributions
@@ -15,13 +17,13 @@ This project uses Docker to provide a consistent Python development environment.
 - **On Linux or Mac (Unix systems)**:
 
   ```bash
-  ./scripts/unix/run.sh
+  ./scripts/unix/run-client.sh
   ```
 
 - **On Windows (Command Prompt)**:
 
   ```bat
-  scripts\windows\run.bat
+  scripts.windows\run-client.bat
   ```
 
 This will:
@@ -29,6 +31,32 @@ This will:
 - Build the Docker image if it has not been built yet
 - Mount your project directory into the container
 - Start a bash shell inside the container, ready to run Python commands
+
+### Smart-Contracts
+
+1. Install and start Docker:
+   - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and Mac
+   - `docker` package for Linux distributions
+
+2. To build and start the development container (from the top directory):
+
+- **On Linux or Mac (Unix systems)**:
+
+  ```bash
+  ./scripts/unix/dev-smart-contracts.sh
+  ```
+
+- **On Windows (Command Prompt)**:
+
+  ```bat
+  scripts.windows\dev-smart-contracts.bat
+  ```
+
+This will:
+
+- Build the Docker image if it has not been built yet
+- Mount your project directory into the container
+- Start a bash shell inside the container, ready to run npm/npx commands
 
 ### Notes
 
