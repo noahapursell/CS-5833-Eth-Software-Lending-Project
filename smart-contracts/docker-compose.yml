@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  hardhat-node:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: npx hardhat node
+    ports:
+      - "8545:8545"
+    networks:
+      - hardhat-network
+
+  deployer:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    depends_on:
+      - hardhat-node
+    entrypoint: >
+      sh -c "
+      npm install &&
+      sleep 10 &&
+      npx hardhat ignition deploy ignition/modules/GameRental.ts --network localhost &&
+      tail -f /dev/null
+      "
+    networks:
+      - hardhat-network
+
+networks:
+  hardhat-network:
+    driver: bridge

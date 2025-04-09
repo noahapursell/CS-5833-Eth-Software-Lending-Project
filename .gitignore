@@ -2,3 +2,4 @@
 **/cache/
 **/artifacts
 **/typechain-types/
+/smart-contracts/ignition/deployments/
