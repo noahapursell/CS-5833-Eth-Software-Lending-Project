@@ -17,13 +17,13 @@ This project uses Docker to provide a consistent Python development environment.
 - **On Linux or Mac (Unix systems)**:
 
   ```bash
-  ./scripts/unix/run-client.sh
+  ./scripts/unix/dev-client.sh
   ```
 
 - **On Windows (Command Prompt)**:
 
   ```bat
-  scripts.windows\run-client.bat
+  scripts.windows\dev-client.bat
   ```
 
 This will:
