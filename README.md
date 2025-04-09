@@ -23,7 +23,7 @@ This project uses Docker to provide a consistent Python development environment.
 - **On Windows (Command Prompt)**:
 
   ```bat
-  scripts.windows\dev-client.bat
+  scripts\windows\dev-client.bat
   ```
 
 This will:
@@ -49,7 +49,7 @@ This will:
 - **On Windows (Command Prompt)**:
 
   ```bat
-  scripts.windows\dev-smart-contracts.bat
+  scripts\windows\dev-smart-contracts.bat
   ```
 
 This will:
