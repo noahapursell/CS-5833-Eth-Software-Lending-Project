@@ -6,7 +6,7 @@ services:
     working_dir: /app
     volumes:
       - .:/app
-    command: sh -c "npm  install && npx hardhat node"
+    command: sh -c "npm  install && npx hardhat node --hostname 0.0.0.0"
     ports:
       - "8545:8545"
     networks:
