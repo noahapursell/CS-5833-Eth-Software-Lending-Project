@@ -10,6 +10,8 @@ COPY package*.json ./
 # Install npm dependencies
 RUN npm install
 
+RUN npm install --save-dev hardhat
+
 # Copy the rest of your project files
 COPY . .
 
