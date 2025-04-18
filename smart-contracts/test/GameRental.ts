@@ -66,9 +66,9 @@ describe("GameRental", function () {
       expect(canPlay).to.equal(true);
 
       // Check that renter's current rentals includes game id 1.
-      const rentals = await gameRental.getCurrentRentals(renter.address);
-      expect(rentals.length).to.equal(1);
-      expect(rentals[0]).to.equal(gameId);
+      const {gameIdsOut, ownerAddrs, ownerRates} = await gameRental.getCurrentRentals(renter.address);
+      expect(gameIdsOut.length).to.equal(1);
+      expect(gameIdsOut[0]).to.equal(gameId);
     });
 
     it("Should not allow renting if the owner is marked as not rentable", async function () {
@@ -98,7 +98,7 @@ describe("GameRental", function () {
       ).to.emit(gameRental, "RentalStopped");
 
       let rentals = await gameRental.getCurrentRentals(renter.address);
-      expect(rentals.length).to.equal(0);
+      expect(rentals['gameIdsOut'].length).to.equal(0);
 
       // Start a new rental and then have the owner stop it.
       await gameRental.connect(renter).rentGame(gameId, owner.address, { value: defaultOwnerRate });
@@ -107,7 +107,7 @@ describe("GameRental", function () {
       ).to.emit(gameRental, "RentalStopped");
 
       rentals = await gameRental.getCurrentRentals(renter.address);
-      expect(rentals.length).to.equal(0);
+      expect(rentals['gameIdsOut'].length).to.equal(0);
     });
 
     it("Should allow a renter to deposit additional funds to extend rental", async function () {
@@ -200,8 +200,8 @@ describe("GameRental", function () {
       await gameRental.connect(owner).buyGame(gameId, { value: price });
       await gameRental.connect(renter).rentGame(gameId, owner.address, { value: defaultOwnerRate });
       const rentals = await gameRental.getCurrentRentals(renter.address);
-      expect(rentals.length).to.equal(1);
-      expect(rentals[0]).to.equal(gameId);
+      expect(rentals['gameIdsOut'].length).to.equal(1);
+      expect(rentals['gameIdsOut'][0]).to.equal(gameId);
     });
 
     it("Should return available rental options for a game", async function () {
