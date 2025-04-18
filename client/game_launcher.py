@@ -1,320 +1,360 @@
-import typer
-import json
-from datetime import datetime
-from pathlib import Path
-from colorama import Fore, Style, init
-import time
 import sys
-import os
+import time
+from typing import List, Tuple
 
-# Initialize colorama for cross-platform color support
-init(autoreset=True)
+import typer
+from rich import print
+from rich.prompt import Prompt, IntPrompt, Confirm
+from rich.table import Table
+from web3 import Web3
 
-app = typer.Typer()
+from lib.account.user import User
+from lib.game_rental.game_rental import GameRental
+from lib.game_rental.models import Game, RentableGame
 
-# Path to the JSON file for persistent data
-DATA_FILE = Path("game_data.json")
+app = typer.Typer(
+    help="CLI that talks directly to the on‑chain GameRental smart‑contract."
+)
 
-def load_data():
-    """Load game library and lending records from the JSON file."""
-    if DATA_FILE.exists():
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {"games": [], "lending_records": []}
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper utilities
+# ─────────────────────────────────────────────────────────────────────────────
 
-def save_data(data):
-    """Save game library and lending records to the JSON file."""
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
 
-def is_game_lent(game_name, owner, data):
-    """Check if a specific game owned by a user is currently lent."""
-    return any(r["game_name"] == game_name and r["owner"] == owner and r["end_time"] is None for r in data["lending_records"])
+def to_eth(wei: int) -> str:
+    """Convert wei → ETH (4‑decimal string)."""
+    return f"{Web3.from_wei(wei, 'ether'):.4f} ETH"
 
-def view_game_library(data, username):
-    """View the user's game library, including owned and borrowed games."""
-    # Get owned games
-    owned_games = [g for g in data["games"] if g["owner"] == username]
-    # Get borrowed games (active lending records where user is the borrower)
-    borrowed_records = [r for r in data["lending_records"] if r["borrower"] == username and r["end_time"] is None]
-    
-    print(f"\n{Fore.BLUE}{Style.BRIGHT}=== Your Game Library ==={Style.RESET_ALL}")
-    
-    # Display owned games
-    if owned_games:
-        print(f"{Fore.CYAN}Owned Games:{Style.RESET_ALL}")
-        for game in owned_games:
-            # Check if the owned game is currently lent out
-            active_lending = next((r for r in data["lending_records"] if r["game_name"] == game["name"] and r["owner"] == username and r["end_time"] is None), None)
-            lending_status = f"{Fore.YELLOW} (Currently Lent to {active_lending['borrower']}){Style.RESET_ALL}" if active_lending else ""
-            status = f"{Fore.GREEN}Lendable at {game['lending_rate_percent']}%/day{Style.RESET_ALL}" if game["lendable"] else f"{Fore.RED}Not lendable{Style.RESET_ALL}"
-            print(f"- {game['name']:<20} | {game['original_price_eth']} ETH | {status}{lending_status}")
-    
-    # Display borrowed games
-    if borrowed_records:
-        print(f"{Fore.CYAN}Borrowed Games:{Style.RESET_ALL}")
-        for record in borrowed_records:
-            print(f"- {record['game_name']:<20} | Borrowed from {record['owner']}")
-    
-    if not owned_games and not borrowed_records:
-        print(f"{Fore.YELLOW}Your library is empty.{Style.RESET_ALL}")
 
-def advertise_game(data, username):
-    """Advertise a game as lendable by setting a lending rate."""
-    owned_games = [g for g in data["games"] if g["owner"] == username and not g["lendable"]]
-    if not owned_games:
-        print(f"{Fore.YELLOW}You have no games to advertise.{Style.RESET_ALL}")
+def select_from_table(header: str, rows: List[Tuple[str, ...]]) -> int:
+    """
+    Render a Rich table, return the zero‑based index of the selected row.
+    Returns –1 when the user cancels.
+    """
+    if not rows:
+        return -1
+
+    table = Table(title=header)
+    table.add_column("#")
+    for _ in rows[0]:
+        table.add_column()
+
+    for idx, row in enumerate(rows, 1):
+        table.add_row(str(idx), *map(str, row))
+
+    print(table)
+    try:
+        choice = IntPrompt.ask("Pick a number (0 to cancel)")
+        return choice - 1 if 0 < choice <= len(rows) else -1
+    except (ValueError, typer.Abort):
+        return -1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Developer: publish a new game
+# ─────────────────────────────────────────────────────────────────────────────
+def publish_game(user: User):
+    """Register a brand‑new game on‑chain (developer action)."""
+    try:
+        game_id = IntPrompt.ask("Game ID (integer)")
+        price_eth = float(Prompt.ask("Purchase price (ETH)"))
+        default_owner_rate = int(
+            Prompt.ask("Default owner rate (wei/min)",
+                       default="100000000000000")
+        )
+        dev_rate = int(
+            Prompt.ask("Developer rental rate (wei/min)",
+                       default="100000000000000")
+        )
+    except (ValueError, typer.Abort):
+        print("[yellow]Cancelled.[/yellow]")
         return
-    print(f"\n{Fore.CYAN}Select a game to advertise as lendable:{Style.RESET_ALL}")
-    for i, game in enumerate(owned_games, 1):
-        print(f"{Fore.GREEN}[{i}] {game['name']} ({game['original_price_eth']} ETH){Style.RESET_ALL}")
-    while True:
-        try:
-            choice = int(input(f"{Fore.CYAN}Enter the number: {Style.RESET_ALL}")) - 1
-            if 0 <= choice < len(owned_games):
-                selected_game = owned_games[choice]
-                rate = float(input(f"{Fore.CYAN}Enter lending rate (% of original price per day): {Style.RESET_ALL}"))
-                selected_game["lendable"] = True
-                selected_game["lending_rate_percent"] = rate
-                save_data(data)
-                daily_rate = (rate / 100) * selected_game["original_price_eth"]
-                print(f"{Fore.GREEN}Advertised {selected_game['name']} at {rate}% per day ({daily_rate} ETH/day).{Style.RESET_ALL}")
-                break
-            else:
-                print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
-        except ValueError:
-            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
 
-def stop_advertising_game(data, username):
-    """Stop advertising a game as lendable."""
-    lendable_games = [g for g in data["games"] if g["owner"] == username and g["lendable"]]
-    if not lendable_games:
-        print(f"{Fore.YELLOW}You have no games advertised as lendable.{Style.RESET_ALL}")
+    print(
+        f"\nSummary:\n  Game ID: {game_id}\n  Price: {price_eth} ETH\n"
+        f"  Default owner rate: {default_owner_rate} wei/min\n"
+        f"  Dev rate: {dev_rate} wei/min"
+    )
+    if not Confirm.ask("Publish this game?"):
+        print("[yellow]Publish cancelled.[/yellow]")
         return
-    print(f"\n{Fore.CYAN}Select a game to stop advertising:{Style.RESET_ALL}")
-    for i, game in enumerate(lendable_games, 1):
-        print(f"{Fore.GREEN}[{i}] {game['name']}{Style.RESET_ALL}")
-    while True:
-        try:
-            choice = int(input(f"{Fore.CYAN}Enter the number: {Style.RESET_ALL}")) - 1
-            if 0 <= choice < len(lendable_games):
-                selected_game = lendable_games[choice]
-                selected_game["lendable"] = False
-                selected_game["lending_rate_percent"] = None
-                save_data(data)
-                print(f"{Fore.GREEN}Stopped advertising {selected_game['name']} as lendable.{Style.RESET_ALL}")
-                break
-            else:
-                print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
-        except ValueError:
-            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
 
-def browse_lendable_games(data, username):
-    """Browse all lendable games that are not owned by the user and not currently lent."""
-    lendable_games = [g for g in data["games"] if g["lendable"] and not is_game_lent(g["name"], g["owner"], data) and g["owner"] != username]
-    if not lendable_games:
-        print(f"{Fore.YELLOW}No lendable games available.{Style.RESET_ALL}")
+    try:
+        receipt = GameRental.register_game(
+            user,
+            game_id=game_id,
+            price_wei=Web3.to_wei(price_eth, "ether"),
+            default_owner_rate=default_owner_rate,
+            dev_rate=dev_rate,
+        )
+        print(
+            f"[green]Game published. TX: {receipt.transactionHash.hex()}[/green]")
+    except Exception as exc:
+        print(f"[red]Publish failed: {exc}[/red]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# View library
+# ─────────────────────────────────────────────────────────────────────────────
+def show_library(user: User):
+    owned = GameRental.get_user_games(user)
+    rentals = GameRental.get_user_rentals(user)
+
+    if not owned and not rentals:
+        print("[yellow]Your library is empty.[/yellow]")
         return
-    print(f"\n{Fore.BLUE}{Style.BRIGHT}=== Lendable Games ==={Style.RESET_ALL}")
-    for game in lendable_games:
-        daily_rate = (game["lending_rate_percent"] / 100) * game["original_price_eth"]
-        print(f"{Fore.GREEN}- {game['name']:<20} | Owner: {game['owner']:<10} | {game['lending_rate_percent']}% of {game['original_price_eth']} ETH/day = {daily_rate} ETH/day{Style.RESET_ALL}")
 
-def request_lend_game(data, username):
-    """Request to lend a game from the list of lendable games (excluding own games)."""
-    lendable_games = [g for g in data["games"] if g["lendable"] and not is_game_lent(g["name"], g["owner"], data) and g["owner"] != username]
-    if not lendable_games:
-        print(f"{Fore.YELLOW}No lendable games available.{Style.RESET_ALL}")
+    if owned:
+        table = Table(title="Owned games")
+        table.add_column("Game ID")
+        table.add_column("Purchase price")
+        table.add_column("Default owner rate (wei/min)")
+        for g in owned:
+            table.add_row(str(g.game_id), to_eth(
+                g.price), str(g.default_owner_rate))
+        print(table)
+
+    if rentals:
+        table = Table(title="Active rentals")
+        table.add_column("Game ID")
+        table.add_column("Owner")
+        table.add_column("Rate (wei/min)")
+        for r in rentals:
+            table.add_row(str(r.game_id), r.owner_address, str(r.owner_rate))
+        print(table)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Owner: advertise / stop advertising
+# ─────────────────────────────────────────────────────────────────────────────
+def advertise(user: User, make_rentable: bool):
+    owned = GameRental.get_user_games(user)
+    if not owned:
+        print("[yellow]You do not own any games.[/yellow]")
         return
-    print(f"\n{Fore.CYAN}Select a game to lend:{Style.RESET_ALL}")
-    for i, game in enumerate(lendable_games, 1):
-        daily_rate = (game["lending_rate_percent"] / 100) * game["original_price_eth"]
-        print(f"{Fore.GREEN}[{i}] {game['name']} (Owner: {game['owner']}), {daily_rate} ETH/day{Style.RESET_ALL}")
-    while True:
-        try:
-            choice = int(input(f"{Fore.CYAN}Enter the number: {Style.RESET_ALL}")) - 1
-            if 0 <= choice < len(lendable_games):
-                selected_game = lendable_games[choice]
-                lending_record = {
-                    "game_name": selected_game["name"],
-                    "owner": selected_game["owner"],
-                    "borrower": username,
-                    "start_time": datetime.now().isoformat(),
-                    "end_time": None,
-                    "lending_rate_percent": selected_game["lending_rate_percent"]
-                }
-                data["lending_records"].append(lending_record)
-                save_data(data)
-                print(f"{Fore.GREEN}Started lending {selected_game['name']} from {selected_game['owner']}.{Style.RESET_ALL}")
-                break
-            else:
-                print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
-        except ValueError:
-            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
 
-def end_my_lending(data, username):
-    """End a lending for a game the user is currently borrowing."""
-    current_lendings = [r for r in data["lending_records"] if r["borrower"] == username and r["end_time"] is None]
-    if not current_lendings:
-        print(f"{Fore.YELLOW}You are not currently lending any games.{Style.RESET_ALL}")
+    idx = select_from_table(
+        "Select one of your games", [
+            (g.game_id, to_eth(g.price)) for g in owned]
+    )
+    if idx == -1:
         return
-    print(f"\n{Fore.CYAN}Select a lending to end:{Style.RESET_ALL}")
-    for i, record in enumerate(current_lendings, 1):
-        print(f"{Fore.GREEN}[{i}] {record['game_name']} (Owner: {record['owner']}){Style.RESET_ALL}")
-    while True:
-        try:
-            choice = int(input(f"{Fore.CYAN}Enter the number: {Style.RESET_ALL}")) - 1
-            if 0 <= choice < len(current_lendings):
-                selected_record = current_lendings[choice]
-                selected_record["end_time"] = datetime.now().isoformat()
-                save_data(data)
-                print(f"{Fore.GREEN}Ended lending {selected_record['game_name']}.{Style.RESET_ALL}")
-                break
-            else:
-                print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
-        except ValueError:
-            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
 
-def view_dashboard(data, username):
-    """View the lending records for the user's games and their own borrowings."""
-    print(f"\n{Fore.BLUE}{Style.BRIGHT}=== Dashboard ==={Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Your Lending Records (games you own that are lent):{Style.RESET_ALL}")
-    owned_lendings = [r for r in data["lending_records"] if r["owner"] == username]
-    if owned_lendings:
-        for record in owned_lendings:
-            status = f"{Fore.RED}Ended at {record['end_time']}{Style.RESET_ALL}" if record["end_time"] else f"{Fore.GREEN}Active{Style.RESET_ALL}"
-            print(f"- {record['game_name']:<20} | Borrower: {record['borrower']:<10} | Start: {record['start_time']:<25} | {status}")
+    game = owned[idx]
+    if make_rentable:
+        receipt = GameRental.make_game_rentable(user, game)
+        state = "rentable"
     else:
-        print(f"{Fore.YELLOW}No lending records for your games.{Style.RESET_ALL}")
-    
-    print(f"\n{Fore.CYAN}Your Borrowing Records:{Style.RESET_ALL}")
-    borrowed_lendings = [r for r in data["lending_records"] if r["borrower"] == username]
-    if borrowed_lendings:
-        for record in borrowed_lendings:
-            status = f"{Fore.RED}Ended at {record['end_time']}{Style.RESET_ALL}" if record["end_time"] else f"{Fore.GREEN}Active{Style.RESET_ALL}"
-            print(f"- {record['game_name']:<20} | Owner: {record['owner']:<10} | Start: {record['start_time']:<25} | {status}")
-    else:
-        print(f"{Fore.YELLOW}No borrowing records.{Style.RESET_ALL}")
+        receipt = GameRental.make_game_unrentable(user, game)
+        state = "NOT rentable"
 
-def launch_game(data, username):
-    """Launch a game with a terminal animation and allow returning to menu by typing 'exit'."""
-    # Get games that the user can play (owned or currently borrowed)
-    owned_games = [g for g in data["games"] if g["owner"] == username]
-    borrowed_records = [r for r in data["lending_records"] if r["borrower"] == username and r["end_time"] is None]
-    playable_games = owned_games + [g for g in data["games"] if any(r["game_name"] == g["name"] and r["owner"] == g["owner"] for r in borrowed_records)]
-    
-    if not playable_games:
-        print(f"{Fore.YELLOW}You have no games to launch.{Style.RESET_ALL}")
+    print(
+        f"[green]Game {game.game_id} is now {state}. "
+        f"TX: {receipt.transactionHash.hex()}[/green]"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Browse & BUY
+# ─────────────────────────────────────────────────────────────────────────────
+def browse_buyable_games(user: User) -> List[Game]:
+    all_games = GameRental.get_buyable_games()
+    owned_ids = {g.game_id for g in GameRental.get_user_games(user)}
+    listings = [g for g in all_games if g.game_id not in owned_ids]
+
+    if not listings:
+        print("[yellow]No games available for purchase.[/yellow]")
+        return []
+
+    table = Table(title="Games available to buy")
+    table.add_column("#")
+    table.add_column("Game ID")
+    table.add_column("Price (ETH)")
+    table.add_column("Developer")
+    for i, g in enumerate(listings, 1):
+        table.add_row(str(i), str(g.game_id), to_eth(g.price), g.developer)
+    print(table)
+    return listings
+
+
+def purchase_game(user: User):
+    options = browse_buyable_games(user)
+    if not options:
         return
-    
-    print(f"\n{Fore.CYAN}Select a game to launch:{Style.RESET_ALL}")
-    for i, game in enumerate(playable_games, 1):
-        print(f"{Fore.GREEN}[{i}] {game['name']}{Style.RESET_ALL}")
-    
-    while True:
-        try:
-            choice = int(input(f"{Fore.CYAN}Enter the number: {Style.RESET_ALL}")) - 1
-            if 0 <= choice < len(playable_games):
-                selected_game = playable_games[choice]
-                break
-            else:
-                print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
-        except ValueError:
-            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
-    
-    # Clear the screen for animation
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    # Simple loading animation
-    animation = ['|', '/', '-', '\\']
-    print(f"{Fore.BLUE}Launching {selected_game['name']}...{Style.RESET_ALL}")
-    for _ in range(20):  # Run animation for ~2 seconds
-        for frame in animation:
-            sys.stdout.write(f"\r{Fore.YELLOW}Loading {frame}{Style.RESET_ALL}")
-            sys.stdout.flush()
-            time.sleep(0.1)
-    
-    # Clear the screen again
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    # Display playing message
-    print(f"{Fore.GREEN}{Style.BRIGHT}Playing {selected_game['name']}{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}Type 'exit' to return to the main menu{Style.RESET_ALL}")
-    
-    # Wait for 'exit' input
-    while True:
-        user_input = input().strip().lower()
-        if user_input == 'exit':
-            print(f"{Fore.YELLOW}Returning to main menu...{Style.RESET_ALL}")
+
+    idx = select_from_table(
+        "Select a game to purchase", [(o.game_id,) for o in options]
+    )
+    if idx == -1:
+        return
+
+    game = options[idx]
+    print(f"Selected game {game.game_id} for {to_eth(game.price)}")
+    if not Confirm.ask("Proceed with purchase?"):
+        print("[yellow]Purchase cancelled.[/yellow]")
+        return
+
+    try:
+        receipt = GameRental.buy_game(user, game)
+        print(
+            f"[green]Purchase successful. TX: {receipt.transactionHash.hex()}[/green]")
+    except Exception as exc:
+        print(f"[red]Purchase failed: {exc}[/red]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Renting
+# ─────────────────────────────────────────────────────────────────────────────
+def browse_rentals(user: User) -> List[RentableGame]:
+    listings: List[RentableGame] = []
+    for g in GameRental.get_buyable_games():
+        for r in GameRental.get_available_rentals(g):
+            if r.owner_address.lower() != user.account.address.lower():
+                listings.append(r)
+
+    if not listings:
+        print("[yellow]No games available to rent.[/yellow]")
+        return []
+
+    table = Table(title="Games available to rent")
+    table.add_column("#")
+    table.add_column("Game ID")
+    table.add_column("Owner")
+    table.add_column("Rate (wei/min)")
+    for i, r in enumerate(listings, 1):
+        table.add_row(str(i), str(r.game_id),
+                      r.owner_address, str(r.owner_rate))
+    print(table)
+    return listings
+
+
+def rent_game(user: User):
+    options = browse_rentals(user)
+    if not options:
+        return
+    idx = select_from_table(
+        "Select a game to rent", [(r.game_id, r.owner_address)
+                                  for r in options]
+    )
+    if idx == -1:
+        return
+    rentable = options[idx]
+    eth = float(Prompt.ask("Deposit amount in ETH", default="0.1"))
+    receipt = GameRental.rent_game(user, rentable, eth_deposit_amount=eth)
+    print(
+        f"[green]Rental started. TX: {receipt.transactionHash.hex()}[/green]")
+
+
+def stop_rental(user: User):
+    active = GameRental.get_user_rentals(user)
+    if not active:
+        print("[yellow]You have no active rentals.[/yellow]")
+        return
+    idx = select_from_table(
+        "Select rental to stop", [(r.game_id, r.owner_address) for r in active]
+    )
+    if idx == -1:
+        return
+    receipt = GameRental.stop_renting(user, active[idx])
+    print(
+        f"[green]Rental stopped. TX: {receipt.transactionHash.hex()}[/green]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Play
+# ─────────────────────────────────────────────────────────────────────────────
+def play_game(user: User):
+    owned = GameRental.get_user_games(user)
+    rentals = [
+        r for r in GameRental.get_user_rentals(user) if GameRental.can_play(user, r)
+    ]
+    selectable: List[Tuple[str, Game | RentableGame]] = [
+        (f"Owned {g.game_id}", g) for g in owned
+    ] + [(f"Rental {r.game_id}", r) for r in rentals]
+
+    if not selectable:
+        print("[yellow]No games you can play right now.[/yellow]")
+        return
+
+    idx = select_from_table("Select a game", [lbl for lbl, _ in selectable])
+    if idx == -1:
+        return
+    label, _ = selectable[idx]
+    print(f"[blue]Launching {label}… (Ctrl‑C to quit)[/blue]")
+    try:
+        while True:
             time.sleep(1)
-            os.system('cls' if os.name == 'nt' else 'clear')
-            return  # Return to main menu
+    except KeyboardInterrupt:
+        print("[yellow]Exited game.[/yellow]")
 
-def print_header():
-    """Print a fancy header with the program name and version."""
-    print(f"{Fore.BLUE}{Style.BRIGHT}{'=' * 40}{Style.RESET_ALL}")
-    print(f"{Fore.BLUE}{Style.BRIGHT} Game Launcher Client v1.0 {Style.RESET_ALL}".center(40))
-    print(f"{Fore.BLUE}{Style.BRIGHT}{'=' * 40}{Style.RESET_ALL}")
 
-def print_welcome(username):
-    """Print a stylized welcome message."""
-    print(f"{Fore.MAGENTA}{Style.BRIGHT}Welcome, {username}!{Style.RESET_ALL}".center(40))
+# ─────────────────────────────────────────────────────────────────────────────
+# Funds
+# ─────────────────────────────────────────────────────────────────────────────
+def deposit(user: User):
+    eth = float(Prompt.ask("Amount in ETH", default="0.1"))
+    receipt = GameRental.deposit_funds(user, eth)
+    print(
+        f"[green]Deposited {eth} ETH. TX: {receipt.transactionHash.hex()}[/green]")
 
-def print_farewell():
-    """Print a stylized farewell message."""
-    print(f"{Fore.MAGENTA}{Style.BRIGHT}Thanks for using Game Launcher! Goodbye!{Style.RESET_ALL}".center(40))
 
+def withdraw(user: User):
+    receipt = GameRental.withdraw_renter_balance(user)
+    print(
+        f"[green]Withdrew renter balance. TX: {receipt.transactionHash.hex()}[/green]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI entry
+# ─────────────────────────────────────────────────────────────────────────────
 @app.command()
-def main():
-    """
-    CLI Game Launcher Client - A visually appealing game library manager with lending features.
-    """
-    # Load data from JSON
-    data = load_data()
+def cli():
+    """Launch the interactive GameRental shell."""
+    pk = Prompt.ask("Enter your Ethereum private key", password=True).strip()
+    try:
+        user = User(pk)
+    except Exception as e:
+        print(f"[red]Invalid private key: {e}[/red]")
+        raise typer.Exit()
 
-    # Dummy login prompt
-    username = input(f"{Fore.CYAN}Enter your login key: {Style.RESET_ALL}")
-    print(f"{Fore.GREEN}Logged in as {username}{Style.RESET_ALL}")
+    print(f"Logged in as [green]{user.account.address}[/green]")
 
-    # Display header and welcome message
-    print_header()
-    print_welcome(username)
+    menu = {
+        "1": ("Publish a new game", lambda: publish_game(user)),
+        "2": ("View my game library", lambda: show_library(user)),
+        "3": ("Advertise one of my games for rent", lambda: advertise(user, True)),
+        "4": ("Remove a game from rent", lambda: advertise(user, False)),
+        "5": ("Browse games available to BUY", lambda: browse_buyable_games(user)),
+        "6": ("Purchase a game", lambda: purchase_game(user)),
+        "7": ("Browse games available to rent", lambda: browse_rentals(user)),
+        "8": ("Rent a game", lambda: rent_game(user)),
+        "9": ("Stop one of my rentals", lambda: stop_rental(user)),
+        "10": ("Launch / play a game", lambda: play_game(user)),
+        "11": ("Deposit funds", lambda: deposit(user)),
+        "12": ("Withdraw unused deposit", lambda: withdraw(user)),
+        "0": ("Exit", None),
+    }
 
-    # Main interactive loop
     while True:
-        print(f"\n{Fore.BLUE}{Style.BRIGHT}=== Menu ==={Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[1] View my game library{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[2] Launch game{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[3] Advertise game as lendable{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[4] Stop advertising game as lendable{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[5] Browse lendable games{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[6] Request to lend a game{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[7] End my lending{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[8] View dashboard{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[9] Logout{Style.RESET_ALL}")
-        choice = input(f"{Fore.CYAN}Select an option: {Style.RESET_ALL}")
+        print("\n[yellow]=== Main menu ===[/yellow]")
+        for key, (title, _) in menu.items():
+            print(f"[{key}] {title}")
+        choice = Prompt.ask("Select option").strip()
 
-        if choice == "1":
-            view_game_library(data, username)
-        elif choice == "2":
-            launch_game(data, username)
-        elif choice == "3":
-            advertise_game(data, username)
-        elif choice == "4":
-            stop_advertising_game(data, username)
-        elif choice == "5":
-            browse_lendable_games(data, username)
-        elif choice == "6":
-            request_lend_game(data, username)
-        elif choice == "7":
-            end_my_lending(data, username)
-        elif choice == "8":
-            view_dashboard(data, username)
-        elif choice == "9":
-            print_farewell()
-            break
-        else:
-            print(f"{Fore.RED}Invalid option. Please try again.{Style.RESET_ALL}")
+        if choice == "0":
+            print("Good‑bye!")
+            sys.exit(0)
+
+        if choice not in menu:
+            print("[red]Invalid selection.[/red]")
+            continue
+
+        try:
+            menu[choice][1]()
+        except Exception as exc:
+            print(f"[red]Error: {exc}[/red]")
+            time.sleep(1)
+
 
 if __name__ == "__main__":
     app()
