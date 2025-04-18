@@ -1,2 +1,7 @@
 typer
 colorama
+web3
+eth-utils
+python-dotenv
+pydantic
+pydantic-settings
