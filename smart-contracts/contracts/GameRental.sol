@@ -355,14 +355,52 @@ contract GameRental {
     }
 
     /**
-     * @notice Returns a list of game IDs that the renter is currently renting.
+     * @notice Returns detailed rental info for the renter.
      * @param renterAddr The address of the renter.
-     * @return An array of game IDs.
+     * @return gameIdsOut Array of game IDs being rented.
+     * @return ownerAddrs Array of owner addresses for each rental.
+     * @return ownerRates Array of owner rental rates (per minute).
      */
     function getCurrentRentals(
         address renterAddr
-    ) external view returns (uint256[] memory) {
-        return renters[renterAddr].currentRentals;
+    )
+        external
+        view
+        returns (
+            uint256[] memory gameIdsOut,
+            address[] memory ownerAddrs,
+            uint256[] memory ownerRates
+        )
+    {
+        uint256[] storage rentals = renters[renterAddr].currentRentals;
+        uint256 len = rentals.length;
+
+        gameIdsOut = new uint256[](len);
+        ownerAddrs = new address[](len);
+        ownerRates = new uint256[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            uint256 gameId = rentals[i];
+            Game storage game = games[gameId];
+
+            // Find the owner who rented this game to the renter
+            bool found = false;
+            for (uint256 j = 0; j < game.ownerList.length; j++) {
+                address owner = game.ownerList[j];
+                Owner storage o = game.owners[owner];
+                if (o.currentRenter == renterAddr) {
+                    gameIdsOut[i] = gameId;
+                    ownerAddrs[i] = owner;
+                    ownerRates[i] = o.ownerRate;
+                    found = true;
+                    break;
+                }
+            }
+
+            require(found, "Owner not found for active rental");
+        }
+
+        return (gameIdsOut, ownerAddrs, ownerRates);
     }
 
     /**
