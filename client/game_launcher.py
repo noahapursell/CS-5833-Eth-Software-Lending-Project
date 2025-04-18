@@ -3,6 +3,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 from colorama import Fore, Style, init
+import time
+import sys
+import os
 
 # Initialize colorama for cross-platform color support
 init(autoreset=True)
@@ -80,7 +83,7 @@ def advertise_game(data, username):
             else:
                 print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
         except ValueError:
-            print(f"{Fore.RED}Please PLEASE ENTER A VALID NUMBER.{Style.RESET_ALL}")
+            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
 
 def stop_advertising_game(data, username):
     """Stop advertising a game as lendable."""
@@ -193,6 +196,60 @@ def view_dashboard(data, username):
     else:
         print(f"{Fore.YELLOW}No borrowing records.{Style.RESET_ALL}")
 
+def launch_game(data, username):
+    """Launch a game with a terminal animation and allow returning to menu by typing 'exit'."""
+    # Get games that the user can play (owned or currently borrowed)
+    owned_games = [g for g in data["games"] if g["owner"] == username]
+    borrowed_records = [r for r in data["lending_records"] if r["borrower"] == username and r["end_time"] is None]
+    playable_games = owned_games + [g for g in data["games"] if any(r["game_name"] == g["name"] and r["owner"] == g["owner"] for r in borrowed_records)]
+    
+    if not playable_games:
+        print(f"{Fore.YELLOW}You have no games to launch.{Style.RESET_ALL}")
+        return
+    
+    print(f"\n{Fore.CYAN}Select a game to launch:{Style.RESET_ALL}")
+    for i, game in enumerate(playable_games, 1):
+        print(f"{Fore.GREEN}[{i}] {game['name']}{Style.RESET_ALL}")
+    
+    while True:
+        try:
+            choice = int(input(f"{Fore.CYAN}Enter the number: {Style.RESET_ALL}")) - 1
+            if 0 <= choice < len(playable_games):
+                selected_game = playable_games[choice]
+                break
+            else:
+                print(f"{Fore.RED}Invalid selection.{Style.RESET_ALL}")
+        except ValueError:
+            print(f"{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
+    
+    # Clear the screen for animation
+    os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # Simple loading animation
+    animation = ['|', '/', '-', '\\']
+    print(f"{Fore.BLUE}Launching {selected_game['name']}...{Style.RESET_ALL}")
+    for _ in range(20):  # Run animation for ~2 seconds
+        for frame in animation:
+            sys.stdout.write(f"\r{Fore.YELLOW}Loading {frame}{Style.RESET_ALL}")
+            sys.stdout.flush()
+            time.sleep(0.1)
+    
+    # Clear the screen again
+    os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # Display playing message
+    print(f"{Fore.GREEN}{Style.BRIGHT}Playing {selected_game['name']}{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}Type 'exit' to return to the main menu{Style.RESET_ALL}")
+    
+    # Wait for 'exit' input
+    while True:
+        user_input = input().strip().lower()
+        if user_input == 'exit':
+            print(f"{Fore.YELLOW}Returning to main menu...{Style.RESET_ALL}")
+            time.sleep(1)
+            os.system('cls' if os.name == 'nt' else 'clear')
+            return  # Return to main menu
+
 def print_header():
     """Print a fancy header with the program name and version."""
     print(f"{Fore.BLUE}{Style.BRIGHT}{'=' * 40}{Style.RESET_ALL}")
@@ -240,8 +297,7 @@ def main():
         if choice == "1":
             view_game_library(data, username)
         elif choice == "2":
-            # Launch game (dummy function)
-            print(f"{Fore.YELLOW}Launching game... (feature not implemented){Style.RESET_ALL}")
+            launch_game(data, username)
         elif choice == "3":
             advertise_game(data, username)
         elif choice == "4":
