@@ -6,6 +6,8 @@ import typer
 from rich import print
 from rich.prompt import Prompt, IntPrompt, Confirm
 from rich.table import Table
+from rich.live import Live
+from rich.layout import Layout
 from web3 import Web3
 
 from lib.account.user import User
@@ -20,11 +22,9 @@ app = typer.Typer(
 # Helper utilities
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def to_eth(wei: int) -> str:
     """Convert wei → ETH (4‑decimal string)."""
-    return f"{Web3.from_wei(wei, 'ether'):.4f} ETH"
-
+    return f"{Web3.from_wei(wei, 'ether'):.4f} ETH"
 
 def select_from_table(header: str, rows: List[Tuple[str, ...]]) -> int:
     """
@@ -49,7 +49,6 @@ def select_from_table(header: str, rows: List[Tuple[str, ...]]) -> int:
     except (ValueError, typer.Abort):
         return -1
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Developer: publish a new game
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,9 +70,9 @@ def publish_game(user: User):
         return
 
     print(
-        f"\nSummary:\n  Game ID: {game_id}\n  Price: {price_eth} ETH\n"
-        f"  Default owner rate: {default_owner_rate} wei/min\n"
-        f"  Dev rate: {dev_rate} wei/min"
+        f"\nSummary:\n  Game ID: {game_id}\n  Price: {price_eth} ETH\n"
+        f"  Default owner rate: {default_owner_rate} wei/min\n"
+        f"  Dev rate: {dev_rate} wei/min"
     )
     if not Confirm.ask("Publish this game?"):
         print("[yellow]Publish cancelled.[/yellow]")
@@ -91,7 +90,6 @@ def publish_game(user: User):
             f"[green]Game published. TX: {receipt.transactionHash.hex()}[/green]")
     except Exception as exc:
         print(f"[red]Publish failed: {exc}[/red]")
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # View library
@@ -123,7 +121,6 @@ def show_library(user: User):
             table.add_row(str(r.game_id), r.owner_address, str(r.owner_rate))
         print(table)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Owner: advertise / stop advertising
 # ─────────────────────────────────────────────────────────────────────────────
@@ -153,7 +150,6 @@ def advertise(user: User, make_rentable: bool):
         f"TX: {receipt.transactionHash.hex()}[/green]"
     )
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Browse & BUY
 # ─────────────────────────────────────────────────────────────────────────────
@@ -175,7 +171,6 @@ def browse_buyable_games(user: User) -> List[Game]:
         table.add_row(str(i), str(g.game_id), to_eth(g.price), g.developer)
     print(table)
     return listings
-
 
 def purchase_game(user: User):
     options = browse_buyable_games(user)
@@ -200,7 +195,6 @@ def purchase_game(user: User):
             f"[green]Purchase successful. TX: {receipt.transactionHash.hex()}[/green]")
     except Exception as exc:
         print(f"[red]Purchase failed: {exc}[/red]")
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Renting
@@ -227,7 +221,6 @@ def browse_rentals(user: User) -> List[RentableGame]:
     print(table)
     return listings
 
-
 def rent_game(user: User):
     options = browse_rentals(user)
     if not options:
@@ -244,7 +237,6 @@ def rent_game(user: User):
     print(
         f"[green]Rental started. TX: {receipt.transactionHash.hex()}[/green]")
 
-
 def stop_rental(user: User):
     active = GameRental.get_user_rentals(user)
     if not active:
@@ -258,7 +250,6 @@ def stop_rental(user: User):
     receipt = GameRental.stop_renting(user, active[idx])
     print(
         f"[green]Rental stopped. TX: {receipt.transactionHash.hex()}[/green]")
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Play
@@ -287,7 +278,6 @@ def play_game(user: User):
     except KeyboardInterrupt:
         print("[yellow]Exited game.[/yellow]")
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Funds
 # ─────────────────────────────────────────────────────────────────────────────
@@ -295,14 +285,105 @@ def deposit(user: User):
     eth = float(Prompt.ask("Amount in ETH", default="0.1"))
     receipt = GameRental.deposit_funds(user, eth)
     print(
-        f"[green]Deposited {eth} ETH. TX: {receipt.transactionHash.hex()}[/green]")
-
+        f"[green]Deposited {eth} ETH. TX: {receipt.transactionHash.hex()}[/green]")
 
 def withdraw(user: User):
     receipt = GameRental.withdraw_renter_balance(user)
     print(
         f"[green]Withdrew renter balance. TX: {receipt.transactionHash.hex()}[/green]")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Owner Dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+def get_owner_rentals(user: User) -> List[Tuple[int, str, int, int]]:
+    """
+    Get all active rentals for games owned by the user.
+    Returns a list of tuples: (game_id, renter_address, owner_rate, owner_payout).
+    """
+    owned_games = GameRental.get_user_games(user)
+    rentals = []
+    for game in owned_games:
+        game_id = game.game_id
+        # Query the contract to get the current renter and owner details
+        try:
+            game_data = games[game_id]
+            owner_data = game_data.owners[user.account.address]
+            renter_addr = owner_data.currentRenter
+            if renter_addr != "0x0000000000000000000000000000000000000000":
+                rentals.append((
+                    game_id,
+                    renter_addr,
+                    owner_data.ownerRate,
+                    owner_data.ownerPayout
+                ))
+        except Exception as exc:
+            print(f"[red]Error fetching rental data for game {game_id}: {exc}[/red]")
+    return rentals
+
+def collect_rent_for_all_games(user: User):
+    """Collect rent for all active rentals of the user's owned games."""
+    owned_games = GameRental.get_user_games(user)
+    for game in owned_games:
+        try:
+            receipt = GameRental.collect_rent(user, game.game_id, user.account.address)
+            if receipt:
+                print(
+                    f"[green]Collected rent for game {game.game_id}. "
+                    f"TX: {receipt.transactionHash.hex()}[/green]"
+                )
+        except Exception as exc:
+            print(f"[red]Failed to collect rent for game {game.game_id}: {exc}[/red]")
+
+def create_dashboard_table(rentals: List[Tuple[int, str, int, int]]) -> Table:
+    """Create a rich table for the owner dashboard."""
+    table = Table(title="Owner Dashboard - Active Rentals")
+    table.add_column("Game ID")
+    table.add_column("Renter Address")
+    table.add_column("Rate (wei/min)")
+    table.add_column("Accumulated Payout (ETH)")
+    
+    for game_id, renter_addr, owner_rate, owner_payout in rentals:
+        table.add_row(
+            str(game_id),
+            renter_addr,
+            str(owner_rate),
+            to_eth(owner_payout)
+        )
+    return table
+
+def owner_dashboard(user: User):
+    """Display a live dashboard for the owner showing active rentals and income."""
+    last_rent_collection = 0
+    RENT_COLLECTION_INTERVAL = 60  # Collect rent every 60 seconds
+
+    layout = Layout()
+    layout.split_column(
+        Layout(name="header"),
+        Layout(name="main")
+    )
+    layout["header"].update("[yellow]Owner Dashboard (Ctrl-C to exit)[/yellow]")
+
+    with Live(layout, refresh_per_second=1, screen=True) as live:
+        try:
+            while True:
+                # Get current rentals
+                rentals = get_owner_rentals(user)
+                
+                # Update dashboard
+                if rentals:
+                    layout["main"].update(create_dashboard_table(rentals))
+                else:
+                    layout["main"].update("[yellow]No active rentals for your games.[/yellow]")
+
+                # Periodically collect rent
+                current_time = time.time()
+                if current_time - last_rent_collection >= RENT_COLLECTION_INTERVAL:
+                    collect_rent_for_all_games(user)
+                    last_rent_collection = current_time
+
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("[yellow]Exiting dashboard.[/yellow]")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI entry
@@ -332,6 +413,7 @@ def cli():
         "10": ("Launch / play a game", lambda: play_game(user)),
         "11": ("Deposit funds", lambda: deposit(user)),
         "12": ("Withdraw unused deposit", lambda: withdraw(user)),
+        "13": ("View owner dashboard", lambda: owner_dashboard(user)),
         "0": ("Exit", None),
     }
 
@@ -354,7 +436,6 @@ def cli():
         except Exception as exc:
             print(f"[red]Error: {exc}[/red]")
             time.sleep(1)
-
 
 if __name__ == "__main__":
     app()
