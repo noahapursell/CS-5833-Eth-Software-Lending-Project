@@ -295,29 +295,18 @@ def withdraw(user: User):
 # ─────────────────────────────────────────────────────────────────────────────
 # Owner Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
-def get_owner_rentals(user: User) -> List[Tuple[int, str, int, int]]:
+def get_owner_rentals(user: User) -> List[Tuple[int, int, str]]:
     """
-    Get all active rentals for games owned by the user.
-    Returns a list of tuples: (game_id, renter_address, owner_rate, owner_payout).
+    Returns all of the user's rentable games.
+    Output: List of (game_id, owner_rate, owner_address)
     """
-    owned_games = GameRental.get_user_games(user)
     rentals = []
+    owned_games = GameRental.get_user_games(user)
     for game in owned_games:
-        game_id = game.game_id
-        # Query the contract to get the current renter and owner details
-        try:
-            game_data = games[game_id]
-            owner_data = game_data.owners[user.account.address]
-            renter_addr = owner_data.currentRenter
-            if renter_addr != "0x0000000000000000000000000000000000000000":
-                rentals.append((
-                    game_id,
-                    renter_addr,
-                    owner_data.ownerRate,
-                    owner_data.ownerPayout
-                ))
-        except Exception as exc:
-            print(f"[red]Error fetching rental data for game {game_id}: {exc}[/red]")
+        available = GameRental.get_available_rentals(game)
+        for listing in available:
+            if listing.owner_address.lower() == user.account.address.lower():
+                rentals.append((listing.game_id, listing.owner_rate, listing.owner_address))
     return rentals
 
 def collect_rent_for_all_games(user: User):
@@ -334,57 +323,83 @@ def collect_rent_for_all_games(user: User):
         except Exception as exc:
             print(f"[red]Failed to collect rent for game {game.game_id}: {exc}[/red]")
 
-def create_dashboard_table(rentals: List[Tuple[int, str, int, int]]) -> Table:
-    """Create a rich table for the owner dashboard."""
-    table = Table(title="Owner Dashboard - Active Rentals")
+def create_dashboard_table(rentals: List[Tuple[int, int, str]]) -> Table:
+    table = Table(title="Owner Dashboard - Rentable Listings")
     table.add_column("Game ID")
-    table.add_column("Renter Address")
     table.add_column("Rate (wei/min)")
-    table.add_column("Accumulated Payout (ETH)")
-    
-    for game_id, renter_addr, owner_rate, owner_payout in rentals:
-        table.add_row(
-            str(game_id),
-            renter_addr,
-            str(owner_rate),
-            to_eth(owner_payout)
-        )
+    table.add_column("Owner Address")
+
+    for game_id, owner_rate, owner_address in rentals:
+        table.add_row(str(game_id), str(owner_rate), owner_address)
     return table
 
-def owner_dashboard(user: User):
-    """Display a live dashboard for the owner showing active rentals and income."""
-    last_rent_collection = 0
-    RENT_COLLECTION_INTERVAL = 60  # Collect rent every 60 seconds
+def owner_dashboard_menu(user: User):
+    auto_collect = Confirm.ask("Enable auto rent collection every 10 minutes?", default=False)
+    last_collection = time.time()
 
-    layout = Layout()
-    layout.split_column(
-        Layout(name="header"),
-        Layout(name="main")
-    )
-    layout["header"].update("[yellow]Owner Dashboard (Ctrl-C to exit)[/yellow]")
+    while True:
+        print("\n[yellow]=== Owner Dashboard ===[/yellow]")
+        print("[1] View active rentable listings")
+        print("[2] Manually collect rent from all games")
+        print("[3] Withdraw owner payout for a game")
+        print("[0] Exit dashboard")
 
-    with Live(layout, refresh_per_second=1, screen=True) as live:
-        try:
-            while True:
-                # Get current rentals
-                rentals = get_owner_rentals(user)
-                
-                # Update dashboard
-                if rentals:
-                    layout["main"].update(create_dashboard_table(rentals))
-                else:
-                    layout["main"].update("[yellow]No active rentals for your games.[/yellow]")
+        if auto_collect and (time.time() - last_collection) >= 600:
+            print("[blue]Auto-collecting rent...[/blue]")
+            owned_games = GameRental.get_user_games(user)
+            for game in owned_games:
+                try:
+                    receipt = GameRental.collect_rent(user, RentableGame(
+                        **game.model_dump(),
+                        owner_address=user.account.address,
+                        owner_rate=game.default_owner_rate
+                    ))
+                    print(f"[green]Auto-collected rent for Game {game.game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+                except Exception as exc:
+                    print(f"[red]Auto-collect failed for Game {game.game_id}: {exc}[/red]")
+            last_collection = time.time()
 
-                # Periodically collect rent
-                current_time = time.time()
-                if current_time - last_rent_collection >= RENT_COLLECTION_INTERVAL:
-                    collect_rent_for_all_games(user)
-                    last_rent_collection = current_time
+        choice = Prompt.ask("Choose an option").strip()
+        if choice == "0":
+            print("[yellow]Exiting owner dashboard.[/yellow]")
+            break
 
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("[yellow]Exiting dashboard.[/yellow]")
+        elif choice == "1":
+            rentals = get_owner_rentals(user)
+            if rentals:
+                print(create_dashboard_table(rentals))
+            else:
+                print("[yellow]You have no games listed for rent.[/yellow]")
 
+        elif choice == "2":
+            owned_games = GameRental.get_user_games(user)
+            for game in owned_games:
+                try:
+                    receipt = GameRental.collect_rent(user, RentableGame(
+                        **game.model_dump(),
+                        owner_address=user.account.address,
+                        owner_rate=game.default_owner_rate
+                    ))
+                    print(f"[green]Collected rent for Game {game.game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+                except Exception as exc:
+                    print(f"[red]Failed to collect rent for Game {game.game_id}: {exc}[/red]")
+
+        elif choice == "3":
+            games = GameRental.get_user_games(user)
+            if not games:
+                print("[yellow]You don't own any games.[/yellow]")
+                continue
+            idx = select_from_table("Select a game to withdraw payout", [(g.game_id,) for g in games])
+            if idx == -1:
+                continue
+            try:
+                receipt = GameRental.withdraw_owner_payout(user, games[idx].game_id)
+                print(f"[green]Withdrew payout for Game {games[idx].game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+            except Exception as exc:
+                print(f"[red]Withdraw failed: {exc}[/red]")
+
+        else:
+            print("[red]Invalid selection.[/red]")
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI entry
 # ─────────────────────────────────────────────────────────────────────────────
@@ -413,7 +428,7 @@ def cli():
         "10": ("Launch / play a game", lambda: play_game(user)),
         "11": ("Deposit funds", lambda: deposit(user)),
         "12": ("Withdraw unused deposit", lambda: withdraw(user)),
-        "13": ("View owner dashboard", lambda: owner_dashboard(user)),
+        "13": ("View owner dashboard", lambda: owner_dashboard_menu(user)),
         "0": ("Exit", None),
     }
 
