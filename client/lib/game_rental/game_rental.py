@@ -288,3 +288,95 @@ class GameRental:
         tx_hash = settings.web3.eth.send_raw_transaction(
             signed.raw_transaction)
         return settings.web3.eth.wait_for_transaction_receipt(tx_hash)
+
+    @staticmethod
+    def get_game_dev_info(game_id: int) -> tuple[str, int]:
+        """
+        Wrapper for the `getGameDevInfo(uint256)` Solidity view.
+
+        Parameters
+        ----------
+        game_id : int
+            The unique game identifier.
+
+        Returns
+        -------
+        tuple[str, int]
+            (developer address, unpaid developer payout in wei)
+        """
+        developer, dev_payout = contract.functions.getGameDevInfo(
+            game_id
+        ).call()
+        return developer, dev_payout
+
+    @staticmethod
+    def get_published_games(dev_addr: str) -> list[Game]:
+        """
+        Wrapper for `getPublishedGames(address)`.
+
+        Parameters
+        ----------
+        dev_addr : str
+            Address of the developer.
+
+        Returns
+        -------
+        list[Game]
+            All `Game` objects whose `developer` matches `dev_addr`.
+        """
+        game_ids = contract.functions.getPublishedGames(dev_addr).call()
+
+        # Re-use the general buy-list and filter in-memory
+        all_games = GameRental.get_buyable_games()
+        return [g for g in all_games if g.game_id in game_ids]
+
+    @staticmethod
+    def get_dev_games_info(dev_addr: str) -> list[dict[str, int]]:
+        """
+        Combine `getPublishedGames` and `getGameDevInfo` to fetch payout
+        information for every game a developer has registered.
+
+        Parameters
+        ----------
+        dev_addr : str
+            Address of the developer.
+
+        Returns
+        -------
+        list[dict[str, int]]
+            One dict per game, with keys:
+            - "game_id"   : uint256
+            - "dev_payout": wei currently owed to the developer
+        """
+        # All game IDs owned by this developer
+        game_ids = contract.functions.getPublishedGames(dev_addr).call()
+
+        # Gather per-game payout info
+        results = []
+        for gid in game_ids:
+            _, dev_payout = contract.functions.getGameDevInfo(gid).call()
+            results.append({
+                "game_id": gid,
+                "dev_payout": dev_payout
+            })
+
+        return results
+
+    @staticmethod
+    def get_owner_games_info(owner_addr: str) -> list[dict[str, int]]:
+        """
+        Fetch unpaid balances for every game `owner_addr` owns.
+
+        Returns
+        -------
+        list[dict]
+            [{ "game_id": 1, "owner_payout": 123_000_000_000_000_000 }, …]
+        """
+        game_ids, payouts = contract.functions.getOwnerGamesInfo(
+            owner_addr
+        ).call()
+
+        return [
+            {"game_id": gid, "owner_payout": payouts[i]}
+            for i, gid in enumerate(game_ids)
+        ]

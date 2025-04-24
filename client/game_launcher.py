@@ -22,9 +22,11 @@ app = typer.Typer(
 # Helper utilities
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def to_eth(wei: int) -> str:
     """Convert wei → ETH (4‑decimal string)."""
     return f"{Web3.from_wei(wei, 'ether'):.4f} ETH"
+
 
 def select_from_table(header: str, rows: List[Tuple[str, ...]]) -> int:
     """
@@ -52,6 +54,8 @@ def select_from_table(header: str, rows: List[Tuple[str, ...]]) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 # Developer: publish a new game
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def publish_game(user: User):
     """Register a brand‑new game on‑chain (developer action)."""
     try:
@@ -94,6 +98,8 @@ def publish_game(user: User):
 # ─────────────────────────────────────────────────────────────────────────────
 # View library
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def show_library(user: User):
     owned = GameRental.get_user_games(user)
     rentals = GameRental.get_user_rentals(user)
@@ -124,6 +130,8 @@ def show_library(user: User):
 # ─────────────────────────────────────────────────────────────────────────────
 # Owner: advertise / stop advertising
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def advertise(user: User, make_rentable: bool):
     owned = GameRental.get_user_games(user)
     if not owned:
@@ -153,6 +161,8 @@ def advertise(user: User, make_rentable: bool):
 # ─────────────────────────────────────────────────────────────────────────────
 # Browse & BUY
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def browse_buyable_games(user: User) -> List[Game]:
     all_games = GameRental.get_buyable_games()
     owned_ids = {g.game_id for g in GameRental.get_user_games(user)}
@@ -171,6 +181,7 @@ def browse_buyable_games(user: User) -> List[Game]:
         table.add_row(str(i), str(g.game_id), to_eth(g.price), g.developer)
     print(table)
     return listings
+
 
 def purchase_game(user: User):
     options = browse_buyable_games(user)
@@ -199,6 +210,8 @@ def purchase_game(user: User):
 # ─────────────────────────────────────────────────────────────────────────────
 # Renting
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def browse_rentals(user: User) -> List[RentableGame]:
     listings: List[RentableGame] = []
     for g in GameRental.get_buyable_games():
@@ -221,6 +234,7 @@ def browse_rentals(user: User) -> List[RentableGame]:
     print(table)
     return listings
 
+
 def rent_game(user: User):
     options = browse_rentals(user)
     if not options:
@@ -236,6 +250,7 @@ def rent_game(user: User):
     receipt = GameRental.rent_game(user, rentable, eth_deposit_amount=eth)
     print(
         f"[green]Rental started. TX: {receipt.transactionHash.hex()}[/green]")
+
 
 def stop_rental(user: User):
     active = GameRental.get_user_rentals(user)
@@ -254,6 +269,8 @@ def stop_rental(user: User):
 # ─────────────────────────────────────────────────────────────────────────────
 # Play
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def play_game(user: User):
     owned = GameRental.get_user_games(user)
     rentals = [
@@ -275,17 +292,30 @@ def play_game(user: User):
     try:
         while True:
             time.sleep(1)
+            if idx < len(owned):
+                print(f"[blue] You are game owner [/blue]")
+            else:
+                renting_index = idx - len(owned)
+                can_play = GameRental.can_play(
+                    renter=user, rentable_game=rentals[renting_index])
+                print(f"[red]Renting... Can Play: {can_play} [/red]")
+                if not can_play:
+                    break
+            print(f"Playing Game {label} ... (Ctrl-C to quit)")
     except KeyboardInterrupt:
         print("[yellow]Exited game.[/yellow]")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Funds
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def deposit(user: User):
     eth = float(Prompt.ask("Amount in ETH", default="0.1"))
     receipt = GameRental.deposit_funds(user, eth)
     print(
         f"[green]Deposited {eth} ETH. TX: {receipt.transactionHash.hex()}[/green]")
+
 
 def withdraw(user: User):
     receipt = GameRental.withdraw_renter_balance(user)
@@ -295,6 +325,8 @@ def withdraw(user: User):
 # ─────────────────────────────────────────────────────────────────────────────
 # Owner Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 def get_owner_rentals(user: User) -> List[Tuple[int, int, str]]:
     """
     Returns all of the user's rentable games.
@@ -306,22 +338,27 @@ def get_owner_rentals(user: User) -> List[Tuple[int, int, str]]:
         available = GameRental.get_available_rentals(game)
         for listing in available:
             if listing.owner_address.lower() == user.account.address.lower():
-                rentals.append((listing.game_id, listing.owner_rate, listing.owner_address))
+                rentals.append(
+                    (listing.game_id, listing.owner_rate, listing.owner_address))
     return rentals
+
 
 def collect_rent_for_all_games(user: User):
     """Collect rent for all active rentals of the user's owned games."""
     owned_games = GameRental.get_user_games(user)
     for game in owned_games:
         try:
-            receipt = GameRental.collect_rent(user, game.game_id, user.account.address)
+            receipt = GameRental.collect_rent(
+                user, game.game_id, user.account.address)
             if receipt:
                 print(
                     f"[green]Collected rent for game {game.game_id}. "
                     f"TX: {receipt.transactionHash.hex()}[/green]"
                 )
         except Exception as exc:
-            print(f"[red]Failed to collect rent for game {game.game_id}: {exc}[/red]")
+            print(
+                f"[red]Failed to collect rent for game {game.game_id}: {exc}[/red]")
+
 
 def create_dashboard_table(rentals: List[Tuple[int, int, str]]) -> Table:
     table = Table(title="Owner Dashboard - Rentable Listings")
@@ -333,8 +370,10 @@ def create_dashboard_table(rentals: List[Tuple[int, int, str]]) -> Table:
         table.add_row(str(game_id), str(owner_rate), owner_address)
     return table
 
+
 def owner_dashboard_menu(user: User):
-    auto_collect = Confirm.ask("Enable auto rent collection every 10 minutes?", default=False)
+    auto_collect = Confirm.ask(
+        "Enable auto rent collection every 10 minutes?", default=False)
     last_collection = time.time()
 
     while True:
@@ -342,6 +381,8 @@ def owner_dashboard_menu(user: User):
         print("[1] View active rentable listings")
         print("[2] Manually collect rent from all games")
         print("[3] Withdraw owner payout for a game")
+        print("[4] End Rental")
+        print("[5] View games that own me money")
         print("[0] Exit dashboard")
 
         if auto_collect and (time.time() - last_collection) >= 600:
@@ -354,9 +395,11 @@ def owner_dashboard_menu(user: User):
                         owner_address=user.account.address,
                         owner_rate=game.default_owner_rate
                     ))
-                    print(f"[green]Auto-collected rent for Game {game.game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+                    print(
+                        f"[green]Auto-collected rent for Game {game.game_id}. TX: {receipt.transactionHash.hex()}[/green]")
                 except Exception as exc:
-                    print(f"[red]Auto-collect failed for Game {game.game_id}: {exc}[/red]")
+                    print(
+                        f"[red]Auto-collect failed for Game {game.game_id}: {exc}[/red]")
             last_collection = time.time()
 
         choice = Prompt.ask("Choose an option").strip()
@@ -380,29 +423,73 @@ def owner_dashboard_menu(user: User):
                         owner_address=user.account.address,
                         owner_rate=game.default_owner_rate
                     ))
-                    print(f"[green]Collected rent for Game {game.game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+                    print(
+                        f"[green]Collected rent for Game {game.game_id}. TX: {receipt.transactionHash.hex()}[/green]")
                 except Exception as exc:
-                    print(f"[red]Failed to collect rent for Game {game.game_id}: {exc}[/red]")
+                    print(
+                        f"[red]Failed to collect rent for Game {game.game_id}: {exc}[/red]")
 
         elif choice == "3":
             games = GameRental.get_user_games(user)
             if not games:
                 print("[yellow]You don't own any games.[/yellow]")
                 continue
-            idx = select_from_table("Select a game to withdraw payout", [(g.game_id,) for g in games])
+            idx = select_from_table("Select a game to withdraw payout", [
+                                    (g.game_id,) for g in games])
             if idx == -1:
                 continue
             try:
-                receipt = GameRental.withdraw_owner_payout(user, games[idx].game_id)
-                print(f"[green]Withdrew payout for Game {games[idx].game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+                receipt = GameRental.withdraw_owner_payout(
+                    user, games[idx].game_id)
+                print(
+                    f"[green]Withdrew payout for Game {games[idx].game_id}. TX: {receipt.transactionHash.hex()}[/green]")
             except Exception as exc:
                 print(f"[red]Withdraw failed: {exc}[/red]")
 
+        elif choice == "4":
+            games = GameRental.get_user_games(user=user)
+            if not games:
+                print("[yello]You don't own any games.[/yellow]")
+                continue
+            idx = select_from_table(header="Select a game to stop renting", rows=[
+                                    (g.game_id, ) for g in games])
+            if idx == -1:
+                continue
+            try:
+                receipt = GameRental.stop_renting(user=user, rentable_game=RentableGame(
+                    **games[idx].model_dump(),
+                    owner_address=user.account.address,
+                    owner_rate=games[idx].default_owner_rate
+                ))
+
+                print(
+                    f"[green]Stopping rental {games[idx].game_id}. TX: {receipt.transactionHash.hex()}[/green]")
+            except Exception as exc:
+                print(f"[red]Withdraw failed: {exc}[/red]")
+        elif choice == "5":
+            def create_owner_table(info: list[dict]) -> Table:
+                table = Table(title="Owner – unpaid balances")
+                table.add_column("Game ID")
+                table.add_column("Unpaid balance")
+                for item in info:
+                    table.add_row(str(item["game_id"]),
+                                  to_eth(item["owner_payout"]))
+                return table
+            owing = GameRental.get_owner_games_info(user.account.address)
+            owing = [o for o in owing if o["owner_payout"] > 0]
+            if owing:
+                print(create_owner_table(owing))
+            else:
+                print(
+                    "[green]No outstanding balances – everything collected.[/green]")
+            continue
         else:
             print("[red]Invalid selection.[/red]")
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI entry
 # ─────────────────────────────────────────────────────────────────────────────
+
+
 @app.command()
 def cli():
     """Launch the interactive GameRental shell."""
@@ -429,6 +516,7 @@ def cli():
         "11": ("Deposit funds", lambda: deposit(user)),
         "12": ("Withdraw unused deposit", lambda: withdraw(user)),
         "13": ("View owner dashboard", lambda: owner_dashboard_menu(user)),
+        "14": ("View developer dashboard", lambda: developer_dashboard_menu(user)),
         "0": ("Exit", None),
     }
 
@@ -451,6 +539,79 @@ def cli():
         except Exception as exc:
             print(f"[red]Error: {exc}[/red]")
             time.sleep(1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Developer dashboard (for the account that *published* games)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def create_dev_table(payouts: list[dict]) -> Table:
+    """Pretty table for unpaid developer balances."""
+    table = Table(title="Developer – unpaid balances")
+    table.add_column("Game ID")
+    table.add_column("Unpaid balance")
+    for item in payouts:
+        table.add_row(str(item["game_id"]), to_eth(item["dev_payout"]))
+    return table
+
+
+def developer_dashboard_menu(user: User):
+    """
+    Interactive dashboard for a developer (publisher).
+
+    • [1] lists every game the caller published and how much is still owed  
+    • [2] lets the dev withdraw the unpaid balance for one of the games
+    """
+    while True:
+        print("\n[yellow]=== Developer Dashboard ===[/yellow]")
+        print("[1] View games that owe me money")
+        print("[2] Withdraw payout for a game")
+        print("[0] Exit dashboard")
+
+        choice = Prompt.ask("Choose an option").strip()
+        if choice == "0":
+            print("[yellow]Exiting developer dashboard.[/yellow]")
+            break
+
+        elif choice == "1":          # ─── list unpaid balances ───
+            payouts = GameRental.get_dev_games_info(user.account.address)
+            if not payouts:
+                print("[yellow]You have not published any games.[/yellow]")
+                continue
+
+            owing = [p for p in payouts if p["dev_payout"] > 0]
+            if owing:
+                print(create_dev_table(owing))
+            else:
+                print("[green]All caught up — no outstanding balances.[/green]")
+
+        elif choice == "2":          # ─── withdraw for a single game ───
+            payouts = GameRental.get_dev_games_info(user.account.address)
+            owing = [p for p in payouts if p["dev_payout"] > 0]
+            if not owing:
+                print("[yellow]No games currently owe you money.[/yellow]")
+                continue
+
+            idx = select_from_table(
+                "Select a game to withdraw payout",
+                [(p["game_id"], to_eth(p["dev_payout"])) for p in owing],
+            )
+            if idx == -1:
+                continue
+
+            game_id = owing[idx]["game_id"]
+            try:
+                receipt = GameRental.withdraw_dev_payout(user, game_id)
+                print(
+                    f"[green]Withdrew payout for Game {game_id}. "
+                    f"TX: {receipt.transactionHash.hex()}[/green]"
+                )
+            except Exception as exc:
+                print(f"[red]Withdraw failed: {exc}[/red]")
+
+        else:
+            print("[red]Invalid selection.[/red]")
+
 
 if __name__ == "__main__":
     app()
