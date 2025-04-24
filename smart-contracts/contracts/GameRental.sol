@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+import "hardhat/console.sol";
+
 contract GameRental {
     // --- Structures ---
     struct RentalSession {
@@ -488,6 +490,96 @@ contract GameRental {
             prices[i] = g.price;
             defaultOwnerRates[i] = g.defaultOwnerRate;
             devRates[i] = g.devRate;
+        }
+    }
+
+    /**
+     * @notice Return developer-specific data for a single game.
+     * @dev
+     * - Keeps the large `games` mapping private yet exposes only the two fields
+     *   a front-end needs to build a “collect my earnings” view.
+     * - **developer** is the wallet that originally called `registerGame`.
+     * - **devPayout** is the amount of wei that has accrued to that developer
+     *   (from game purchases and rent fees) and is still held by the contract.
+     *   The value goes to zero when `withdrawDevPayout(gameId)` succeeds.
+     *
+     * @param gameId The unique identifier of the game.
+     * @return developer  Address that published the game.
+     * @return devPayout  Current unpaid balance (in wei) available to withdraw.
+     */
+    function getGameDevInfo(
+        uint256 gameId
+    ) external view returns (address developer, uint256 devPayout) {
+        Game storage g = games[gameId];
+        return (g.developer, g.devPayout);
+    }
+
+    /**
+     * @notice Returns all gameIds published by a particular developer.
+     * @dev Similar to getOwnedGames but for the dev role.
+     */
+    function getPublishedGames(
+        address devAddr
+    ) external view returns (uint256[] memory) {
+        uint256 count;
+        for (uint256 i = 0; i < gameIds.length; i++) {
+            if (games[gameIds[i]].developer == devAddr) count++;
+        }
+
+        uint256[] memory list = new uint256[](count);
+        uint256 idx;
+        for (uint256 i = 0; i < gameIds.length; i++) {
+            uint256 id = gameIds[i];
+            if (games[id].developer == devAddr) {
+                list[idx++] = id;
+            }
+        }
+        return list;
+    }
+
+    /**
+     * @notice Return the unpaid balance for a single owner on one game.
+     * @param gameId     The game identifier.
+     * @param ownerAddr  Address of the owner.
+     * @return ownerPayout  Amount of wei the contract currently owes that owner.
+     */
+    function getGameOwnerInfo(
+        uint256 gameId,
+        address ownerAddr
+    ) external view returns (uint256 ownerPayout) {
+        Game storage g = games[gameId];
+        return g.owners[ownerAddr].ownerPayout;
+    }
+
+    /**
+     * @notice Return *all* games an address owns + their unpaid balances.
+     * @param ownerAddr  Address of the owner.
+     * @return gameIdsOwned   Array of gameIds owned by `ownerAddr`.
+     * @return ownerPayouts   Unpaid balances (wei) aligned with `gameIdsOwned`.
+     */
+    function getOwnerGamesInfo(
+        address ownerAddr
+    )
+        external
+        view
+        returns (uint256[] memory gameIdsOwned, uint256[] memory ownerPayouts)
+    {
+        uint256 count;
+        for (uint256 i = 0; i < gameIds.length; i++) {
+            if (games[gameIds[i]].owners[ownerAddr].ownerRate > 0) count++;
+        }
+
+        gameIdsOwned = new uint256[](count);
+        ownerPayouts = new uint256[](count);
+
+        uint256 idx;
+        for (uint256 i = 0; i < gameIds.length; i++) {
+            uint256 id = gameIds[i];
+            if (games[id].owners[ownerAddr].ownerRate > 0) {
+                gameIdsOwned[idx] = id;
+                ownerPayouts[idx] = games[id].owners[ownerAddr].ownerPayout;
+                idx++;
+            }
         }
     }
 

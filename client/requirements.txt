@@ -5,3 +5,4 @@ eth-utils
 python-dotenv
 pydantic
 pydantic-settings
+asciichartpy
