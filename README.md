@@ -35,20 +35,19 @@ This will:
    - `docker` package for Linux distributions
 
 1. To build and start the production container (from the top directory):
+   - **On Linux or Mac (Unix systems)**:
 
-- **On Linux or Mac (Unix systems)**:
+     ```bash
+     ./scripts/unix/dev-client.sh
+     ```
 
-  ```bash
-  ./scripts/unix/dev-client.sh
-  ```
+   - **On Windows (Command Prompt)**:
 
-- **On Windows (Command Prompt)**:
+     ```bat
+     scripts\windows\dev-client.bat
+     ```
 
-  ```bat
-  scripts\windows\dev-client.bat
-  ```
-
-1. Run the client with `python game_launcher.py`.
+3. Run the client with `python game_launcher.py`.
 
 ## Development
 
