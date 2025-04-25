@@ -1,5 +1,19 @@
 # CS-5833-Eth-Software-Lending-Project
 
+**Authors**: Nima Najafian & Noah Pursell
+
+## Overview
+
+This project is a decentralized software lending platform built as part of CS-5833. It demonstrates how Ethereum smart contracts, Dockerized development environments, and client-server interactions can be used to manage software licensing in a permissionless, programmable way.
+
+The platform includes:
+
+- A smart-contract system for renting and purchasing software (games)
+- A Dockerized client interface for interacting with the platform
+- Development tooling for rapid iteration on both client and smart-contract layers
+
+📄 **[Read the full project report](./LimeLendReport.pdf)** for a detailed explanation of the architecture, design decisions, and implementation.
+
 ## Deployment
 
 ### Smart-Contracts Deployment
