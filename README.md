@@ -8,7 +8,7 @@
    - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and Mac
    - `docker` package for Linux distributions
 
-2. To build and start the development container (from the top directory):
+2. To build and start the production container (from the top directory):
 
 - **On Linux or Mac (Unix systems)**:
 
@@ -27,6 +27,28 @@ This will:
 - Build the Docker image if it has not been built yet
 - Deploy one container to run the HardHat ETH Network
 - Deploy a second container that uses the HardHat Ignition Framework to deploy the GameRental smart-contract
+
+### Client Deployment
+
+1. Install and start Docker:
+   - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and Mac
+   - `docker` package for Linux distributions
+
+1. To build and start the production container (from the top directory):
+
+- **On Linux or Mac (Unix systems)**:
+
+  ```bash
+  ./scripts/unix/dev-client.sh
+  ```
+
+- **On Windows (Command Prompt)**:
+
+  ```bat
+  scripts\windows\dev-client.bat
+  ```
+
+1. Run the client with `python game_launcher.py`.
 
 ## Development
 
