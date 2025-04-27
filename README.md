@@ -14,6 +14,8 @@ The platform includes:
 
 📄 **[Read the full project report](./LimeLendReport.pdf)** for a detailed explanation of the architecture, design decisions, and implementation.
 
+**[Watch a demonstration of the LimeLend Client](https://www.youtube.com/watch?v=v7LRLdV4ukY)**
+
 ## Deployment
 
 ### Smart-Contracts Deployment
