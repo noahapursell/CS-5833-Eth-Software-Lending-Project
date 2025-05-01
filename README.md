@@ -20,6 +20,8 @@ The platform includes:
 
 ## Deployment
 
+**Update the `.env` file to match your setup.**
+
 ### Smart-Contracts Deployment
 
 1. Install and start Docker:
