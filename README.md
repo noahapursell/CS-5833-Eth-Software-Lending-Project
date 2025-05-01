@@ -16,6 +16,8 @@ The platform includes:
 
 **[Watch a demonstration of the LimeLend Client](https://www.youtube.com/watch?v=v7LRLdV4ukY)**
 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/v7LRLdV4ukY" frameborder="0" allowfullscreen></iframe>
+
 ## Deployment
 
 ### Smart-Contracts Deployment
