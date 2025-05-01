@@ -14,6 +14,8 @@ The platform includes:
 
 📄 **[Read the full project report](./LimeLendReport.pdf)** for a detailed explanation of the architecture, design decisions, and implementation.
 
+**Watch the Demo Video**
+
 [![Watch the demonstration](https://img.youtube.com/vi/v7LRLdV4ukY/0.jpg)](https://www.youtube.com/watch?v=v7LRLdV4ukY)
 
 ## Deployment
