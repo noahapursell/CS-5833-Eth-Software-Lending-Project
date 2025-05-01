@@ -14,9 +14,7 @@ The platform includes:
 
 📄 **[Read the full project report](./LimeLendReport.pdf)** for a detailed explanation of the architecture, design decisions, and implementation.
 
-**[Watch a demonstration of the LimeLend Client](https://www.youtube.com/watch?v=v7LRLdV4ukY)**
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/v7LRLdV4ukY" frameborder="0" allowfullscreen></iframe>
+[![Watch the demonstration](https://img.youtube.com/vi/v7LRLdV4ukY/0.jpg)](https://www.youtube.com/watch?v=v7LRLdV4ukY)
 
 ## Deployment
 
